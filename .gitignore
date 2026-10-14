@@ -13,3 +13,6 @@ emulator-data/
 
 # macOS
 .DS_Store
+
+# Leftover temp files from file-system sandboxes
+.fuse_hidden*

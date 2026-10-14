@@ -1,0 +1,53 @@
+rules_version = '2';
+
+// Firestore security rules for the Tournament & League Management System.
+//
+// Design rule: clients never write to the database directly. Every change
+// goes through a Cloud Function, which verifies the caller's identity token
+// and role before writing with the Admin SDK. (The Admin SDK bypasses these
+// rules, so authorization for writes lives in the functions; these rules
+// exist to stop anyone from skipping the functions and writing directly.)
+//
+// Reads are limited by role:
+//   - Signed-in users can read tournaments and their matches (brackets and
+//     leaderboards are visible to every player).
+//   - A player can read only their own player profile and registrations.
+//   - Administrators (custom claim admin == true) can read everything.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if signedIn();
+      allow write: if false;
+
+      match /matches/{matchId} {
+        allow read: if signedIn();
+        allow write: if false;
+      }
+    }
+
+    match /players/{playerId} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == playerId);
+      allow write: if false;
+    }
+
+    match /registrations/{registrationId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.playerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Anything not matched above is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

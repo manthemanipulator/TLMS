@@ -13,8 +13,8 @@ Functions), Stripe (test mode), an email provider, and the existing
 | Component | Status |
 | --- | --- |
 | Bracket and scheduling engine (`functions/bracket`) | Implemented and unit tested |
-| Firestore data model and security rules | Not started |
-| Cloud Functions API (registration, results, leaderboard) | Not started |
+| Firestore data model and security rules | Implemented; rules tests run on the Firestore emulator |
+| Cloud Functions API (tournaments, registration, close roster, results, swap, leaderboard) | Implemented; payment confirmation pending Stripe |
 | Player portal and administrator dashboard | Not started |
 | Stripe test-mode payments and webhook | Not started |
 | Email notifications | Not started |
@@ -39,13 +39,41 @@ tested.
   head-to-head among tied players, then score differential, then seed.
 - Both formats support low-score-wins (golf) and high-score-wins games.
 
-### Running the tests
+## Firebase setup
 
-Requires Node.js 22 or later. No dependencies need to be installed.
+Development runs entirely on the Firebase Local Emulator Suite under the
+project ID `demo-tlms`. The `demo-` prefix means the emulators can never reach
+a real cloud project, so nothing here can affect Paper Golf's live Firebase
+project. A separate production project will be created for deployment.
+
+## Running the tests
+
+Requirements: Node.js 22+, the Firebase CLI (`npm install -g firebase-tools`),
+and Java 21+ for the Firestore emulator.
 
 ```
 cd functions
-npm test
+npm install
+npm test            # bracket engine unit tests (no emulator needed)
+npm run test:rules  # Firestore security rules, on the Firestore emulator
+npm run test:api    # REST API integration tests, on the Auth + Firestore emulators
+npm run test:all    # all three
 ```
 
-The suite checks every participant count from 2 through 128 for both formats.
+The engine suite checks every participant count from 2 through 128 for both
+formats. The API tests use real emulator ID tokens and admin claims and cover
+the 400/401/403/404/409 responses from the design's interface contract.
+
+## API (v1)
+
+All requests need `Authorization: Bearer <Firebase ID token>`.
+
+| Method and path | Who | Purpose |
+| --- | --- | --- |
+| `POST /v1/tournaments` | Admin | Create and publish an event |
+| `GET /v1/tournaments` | Player | List events |
+| `POST /v1/registrations` | Player | Hold a seat (409 if duplicate, full, closed or past deadline) |
+| `POST /v1/tournaments/:id/close` | Admin | Close roster, seed paid players by registration time, generate schedule |
+| `POST /v1/tournaments/:id/matches/:matchId/result` | Admin | Record or correct a score and advance the bracket |
+| `POST /v1/tournaments/:id/swap` | Admin | Swap two players in unplayed first-round matches |
+| `GET /v1/tournaments/:id/leaderboard` | Player | Bracket and champion, or round-robin standings |
