@@ -14,9 +14,9 @@ Functions), Stripe (test mode), an email provider, and the existing
 | --- | --- |
 | Bracket and scheduling engine (`functions/bracket`) | Implemented and unit tested |
 | Firestore data model and security rules | Implemented; rules tests run on the Firestore emulator |
-| Cloud Functions API (tournaments, registration, close roster, results, swap, leaderboard) | Implemented; payment confirmation pending Stripe |
+| Cloud Functions API (tournaments, registration, close roster, results, swap, leaderboard) | Implemented and integration tested |
 | Player portal and administrator dashboard | Not started |
-| Stripe test-mode payments and webhook | Not started |
+| Stripe test-mode payments, signed webhook, withdrawal with refund, reconciliation | Implemented; tested with recorded Stripe responses, live check pending |
 | Email notifications | Not started |
 | Paper Golf scoring adapter | Not started |
 
@@ -77,3 +77,20 @@ All requests need `Authorization: Bearer <Firebase ID token>`.
 | `POST /v1/tournaments/:id/matches/:matchId/result` | Admin | Record or correct a score and advance the bracket |
 | `POST /v1/tournaments/:id/swap` | Admin | Swap two players in unplayed first-round matches |
 | `GET /v1/tournaments/:id/leaderboard` | Player | Bracket and champion, or round-robin standings |
+| `POST /v1/registrations/:id/withdraw` | Player (own) or Admin | Withdraw before the roster closes; refunds paid entries |
+| `POST /v1/webhooks/payment` | Stripe (signature) | Payment succeeded/failed/canceled and refund events |
+| `POST /v1/admin/reconcile` | Admin | Run the pending-payment reconciliation now (also scheduled every 5 minutes) |
+
+## Stripe setup (test mode)
+
+Create `functions/.env` (never committed):
+
+```
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...   # printed by `stripe listen`
+```
+
+Every charge and refund uses an idempotency key built from the registration
+ID and attempt number, and webhook events are recorded by event ID, so
+retries and duplicate deliveries cannot double-charge, double-refund or
+double-confirm.

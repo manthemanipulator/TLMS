@@ -16,6 +16,8 @@ const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { requireUser, requireAdmin } = require('./auth');
 const { badRequest, notFound, conflict, errorHandler } = require('./errors');
 const { engine, toEngineSchedule, scheduleMetadata, changedMatches, isComplete, runEngine } = require('./schedule');
+const { forbidden } = require('./errors');
+const { confirmPayment, releaseSeat, completeRefund, claimEvent, reconcilePending, SEAT_RELEASED } = require('./payments');
 
 const FORMATS = ['single_elimination', 'round_robin'];
 const MAX_PLAYERS = 128;
@@ -24,8 +26,36 @@ const SEAT_HOLD_MINUTES = 15;
 // Firestore allows at most 500 writes per batch.
 const BATCH_LIMIT = 450;
 
-function createApp({ db, auth }) {
+function createApp({ db, auth, payments }) {
   const app = express();
+
+  // -------------------------------------------------------------------------
+  // POST /v1/webhooks/payment  (Stripe, verified by signature)
+  //
+  // Registered before the JSON parser because signature verification needs
+  // the exact raw bytes Stripe sent. Cloud Functions provides req.rawBody;
+  // elsewhere (tests) express.raw collects it. No user token is involved:
+  // the Stripe-Signature header is what proves the request came from Stripe.
+  // -------------------------------------------------------------------------
+  app.post('/v1/webhooks/payment', rawBody, async (req, res, next) => {
+    try {
+      const event = payments.verifyWebhook(req.rawBody, req.get('Stripe-Signature'));
+      if (!(await claimEvent(db, event.id, event.type))) {
+        return res.json({ received: true, duplicate: true });
+      }
+      try {
+        await handlePaymentEvent(db, payments, event);
+      } catch (err) {
+        // Un-claim so Stripe's automatic retry can process it again.
+        await db.collection('webhookEvents').doc(event.id).delete();
+        throw err;
+      }
+      res.json({ received: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   app.use(express.json({ limit: '100kb' }));
 
   const v1 = express.Router();
@@ -67,16 +97,19 @@ function createApp({ db, auth }) {
   });
 
   // -------------------------------------------------------------------------
-  // POST /v1/registrations  (player) - hold a roster seat
+  // POST /v1/registrations  (player) - hold a roster seat and start payment
   //
   // The registration document ID is `${tournamentId}_${uid}`, so a second
   // attempt by the same player finds the existing document and fails with
-  // 409 instead of creating a duplicate. The capacity check, the seat count
-  // and the new document are written in one transaction, so two players
-  // cannot both take the last seat.
+  // 409 instead of creating a duplicate. (A player whose earlier hold was
+  // released or refunded may register again.) The capacity check, the seat
+  // count and the registration are written in one transaction, so two
+  // players cannot both take the last seat.
   //
-  // Payment is not connected yet: the registration is created in the
-  // 'pending_payment' state and will be confirmed by the Stripe webhook.
+  // For paid events a Stripe PaymentIntent is created after the transaction
+  // and its client secret is returned for the browser's payment form. The
+  // seat stays on hold until the signed webhook (or the reconciliation job)
+  // confirms the payment. Free events are confirmed immediately.
   // -------------------------------------------------------------------------
   v1.post('/registrations', async (req, res, next) => {
     try {
@@ -89,23 +122,29 @@ function createApp({ db, auth }) {
       const rRef = db.collection('registrations').doc(`${tournamentId}_${uid}`);
       const pRef = db.collection('players').doc(uid);
 
-      await db.runTransaction(async (tx) => {
+      const { t, attempt, free } = await db.runTransaction(async (tx) => {
         const [tSnap, rSnap, pSnap] = await Promise.all([tx.get(tRef), tx.get(rRef), tx.get(pRef)]);
         if (!tSnap.exists) throw notFound('Tournament not found');
-        const t = tSnap.data();
-        if (rSnap.exists) throw conflict('You are already registered for this tournament');
-        if (t.status !== 'open') throw conflict('Registration is closed for this tournament');
-        if (Date.now() > Date.parse(t.registrationDeadline)) {
+        const tData = tSnap.data();
+        const previous = rSnap.exists ? rSnap.data() : null;
+        if (previous && !SEAT_RELEASED.includes(previous.paymentStatus)) {
+          throw conflict('You are already registered for this tournament');
+        }
+        if (tData.status !== 'open') throw conflict('Registration is closed for this tournament');
+        if (Date.now() > Date.parse(tData.registrationDeadline)) {
           throw conflict('The registration deadline has passed');
         }
-        if (t.registeredCount >= t.capacity) throw conflict('This tournament is full');
+        if (tData.registeredCount >= tData.capacity) throw conflict('This tournament is full');
 
+        const isFree = tData.entryFeeCents === 0;
+        const nextAttempt = (previous?.attempt || 0) + 1;
         const now = Timestamp.now();
-        tx.create(rRef, {
+        tx.set(rRef, {
           playerId: uid,
           tournamentId,
-          paymentStatus: 'pending_payment',
+          paymentStatus: isFree ? 'paid' : 'pending_payment',
           paymentReference: null,
+          attempt: nextAttempt,
           createdAt: now,
           holdExpiresAt: Timestamp.fromMillis(now.toMillis() + SEAT_HOLD_MINUTES * 60000),
         });
@@ -119,9 +158,101 @@ function createApp({ db, auth }) {
             createdAt: now,
           });
         }
+        return { t: tData, attempt: nextAttempt, free: isFree };
       });
 
-      res.status(201).json({ registrationId: rRef.id, paymentStatus: 'pending_payment' });
+      if (free) {
+        return res.status(201).json({ registrationId: rRef.id, paymentStatus: 'paid' });
+      }
+
+      let intent;
+      try {
+        intent = await payments.createPaymentIntent({
+          amountCents: t.entryFeeCents,
+          registrationId: rRef.id,
+          attempt,
+          tournamentId,
+          playerId: uid,
+          description: `Entry fee: ${t.name}`,
+        });
+      } catch (err) {
+        // Stripe was unreachable: give the seat back so the player can retry.
+        await releaseSeat(db, rRef.id);
+        throw err;
+      }
+      await rRef.update({ paymentReference: intent.id });
+      res.status(201).json({
+        registrationId: rRef.id,
+        paymentStatus: 'pending_payment',
+        clientSecret: intent.client_secret,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /v1/registrations/:id/withdraw  (the registered player, or admin)
+  //
+  // Allowed until the roster closes. An unpaid hold is released at once. A
+  // paid registration moves to 'withdrawing' and a full refund is requested;
+  // the charge.refunded webhook then marks it refunded and releases the seat
+  // in one transaction. (This also covers the administrator refund endpoint
+  // from the design table.)
+  // -------------------------------------------------------------------------
+  v1.post('/registrations/:id/withdraw', async (req, res, next) => {
+    try {
+      const rRef = db.collection('registrations').doc(req.params.id);
+      const rSnap = await rRef.get();
+      if (!rSnap.exists) throw notFound('Registration not found');
+      const reg = rSnap.data();
+      if (reg.playerId !== req.user.uid && !req.user.admin) throw forbidden();
+
+      const t = (await db.collection('tournaments').doc(reg.tournamentId).get()).data();
+      if (t.status !== 'open') throw conflict('Withdrawals close when the roster closes');
+
+      if (reg.paymentStatus === 'pending_payment') {
+        if (reg.paymentReference) {
+          await payments.cancelPaymentIntent(reg.paymentReference).catch(() => {});
+        }
+        const status = await releaseSeat(db, rRef.id, 'withdrawn');
+        return res.json({ paymentStatus: status });
+      }
+      if (reg.paymentStatus !== 'paid') {
+        throw conflict(`This registration is ${reg.paymentStatus} and cannot be withdrawn`);
+      }
+
+      // Mark withdrawing first so a second click cannot request a second
+      // refund; the Stripe idempotency key backs that up.
+      const claimed = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(rRef);
+        if (snap.data().paymentStatus !== 'paid') return false;
+        tx.update(rRef, { paymentStatus: 'withdrawing' });
+        return true;
+      });
+      if (!claimed) throw conflict('A withdrawal is already in progress');
+
+      try {
+        await payments.refund({ paymentIntentId: reg.paymentReference, registrationId: rRef.id, attempt: reg.attempt || 1 });
+      } catch (err) {
+        await rRef.update({ paymentStatus: 'paid' });
+        throw err;
+      }
+      res.json({ paymentStatus: 'withdrawing' });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /v1/admin/reconcile  (administrator)
+  // Runs the pending-payment reconciliation on demand. In production the
+  // same job runs every five minutes as a scheduled function; the emulator
+  // does not run schedules, so this endpoint is how it is exercised locally.
+  // -------------------------------------------------------------------------
+  v1.post('/admin/reconcile', requireAdmin, async (req, res, next) => {
+    try {
+      res.json(await reconcilePending(db, payments));
     } catch (err) {
       next(err);
     }
@@ -258,6 +389,48 @@ function createApp({ db, auth }) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Ensures req.rawBody holds the exact request bytes (see webhook route). */
+function rawBody(req, res, next) {
+  if (req.rawBody) return next();
+  express.raw({ type: '*/*', limit: '1mb' })(req, res, (err) => {
+    if (err) return next(err);
+    req.rawBody = req.body;
+    next();
+  });
+}
+
+/** Applies a verified Stripe event to the matching registration. */
+async function handlePaymentEvent(db, payments, event) {
+  const obj = event.data.object;
+  switch (event.type) {
+    case 'payment_intent.succeeded': {
+      const registrationId = obj.metadata?.registrationId;
+      if (!registrationId) return;
+      const status = await confirmPayment(db, registrationId, obj.id);
+      if (status === 'refund_due') {
+        const reg = (await db.collection('registrations').doc(registrationId).get()).data();
+        await payments.refund({ paymentIntentId: obj.id, registrationId, attempt: reg.attempt || 1 });
+      }
+      return;
+    }
+    case 'payment_intent.payment_failed':
+    case 'payment_intent.canceled': {
+      const registrationId = obj.metadata?.registrationId;
+      if (registrationId) await releaseSeat(db, registrationId);
+      return;
+    }
+    case 'charge.refunded': {
+      // Look the registration up by its PaymentIntent, which every charge
+      // created from a PaymentIntent carries.
+      const snap = await db.collection('registrations').where('paymentReference', '==', obj.payment_intent).limit(1).get();
+      if (!snap.empty) await completeRefund(db, snap.docs[0].id);
+      return;
+    }
+    default:
+      // Other event types are acknowledged and ignored.
+  }
+}
 
 /**
  * Loads a tournament's schedule inside a transaction, applies an engine
