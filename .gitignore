@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Secrets: provider keys and webhook signing secrets never go in the repo
+.env
+.env.*
+!.env.example
+
+# Firebase emulator and debug output
+*-debug.log
+.firebase/
+emulator-data/
+
+# macOS
+.DS_Store
