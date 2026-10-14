@@ -52,6 +52,9 @@ function createApp({ db, auth, payments }) {
       }
       res.json({ received: true });
     } catch (err) {
+      // Log the reason (never the payload or secret) so failed deliveries
+      // can be diagnosed from the server log.
+      console.warn(`Webhook rejected: ${err.message}`);
       next(err);
     }
   });
@@ -368,14 +371,20 @@ function createApp({ db, auth, payments }) {
         return res.json({ status: t.status, message: 'The bracket has not been generated yet' });
       }
       const schedule = toEngineSchedule(t, mSnap.docs.map((d) => d.data()));
+      // Player profiles are private in Firestore, so the leaderboard supplies
+      // the display names needed to show a bracket (names only, no emails).
+      const profiles = await db.getAll(...t.seedOrder.map((uid) => db.collection('players').doc(uid)));
+      const players = Object.fromEntries(profiles.map((p) => [p.id, p.exists ? p.data().name : 'Player']));
       if (t.format === 'round_robin') {
         return res.json({
           status: t.status,
           format: t.format,
+          players,
           standings: engine.computeStandings(schedule, t.seedOrder),
+          matches: schedule.matches,
         });
       }
-      res.json({ status: t.status, format: t.format, championId: t.championId ?? null, matches: schedule.matches });
+      res.json({ status: t.status, format: t.format, players, championId: t.championId ?? null, matches: schedule.matches });
     } catch (err) {
       next(err);
     }

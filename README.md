@@ -15,7 +15,7 @@ Functions), Stripe (test mode), an email provider, and the existing
 | Bracket and scheduling engine (`functions/bracket`) | Implemented and unit tested |
 | Firestore data model and security rules | Implemented; rules tests run on the Firestore emulator |
 | Cloud Functions API (tournaments, registration, close roster, results, swap, leaderboard) | Implemented and integration tested |
-| Player portal and administrator dashboard | Not started |
+| Player portal and administrator dashboard (`public/`) | Implemented; first live run pending |
 | Stripe test-mode payments, signed webhook, withdrawal with refund, reconciliation | Implemented; tested with recorded Stripe responses, live check pending |
 | Email notifications | Not started |
 | Paper Golf scoring adapter | Not started |
@@ -38,6 +38,39 @@ tested.
   bye so each player sits out exactly once. Standings rank by points, then
   head-to-head among tied players, then score differential, then seed.
 - Both formats support low-score-wins (golf) and high-score-wins games.
+
+## Running the app locally
+
+You need three terminals. In the first, start Stripe webhook forwarding and
+copy the `whsec_...` secret it prints into `functions/.env` as
+`STRIPE_WEBHOOK_SECRET`:
+
+```
+stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled,charge.refunded \
+  --forward-to localhost:5001/demo-tlms/us-central1/api/v1/webhooks/payment
+```
+
+In the second, start the emulators from the project root:
+
+```
+firebase emulators:start
+```
+
+In the third, load the demo data:
+
+```
+cd functions && npm run seed
+```
+
+Then open http://localhost:5002 and sign in with an emulator-only test account:
+`player@venue.test` / `Password123` (player) or `admin@venue.test` /
+`AdminPassword123` (administrator). Pay with Stripe's test card
+`4242 4242 4242 4242`, any future expiry and any CVC. The Emulator Suite UI
+is at http://localhost:4000.
+
+Front-end structure (`public/js`): `models/` (Firebase setup and the API
+client), `views/` (rendering helpers), and `controllers/` (authentication,
+catalog, registration, live view and administration).
 
 ## Firebase setup
 

@@ -1,0 +1,122 @@
+/* TLMS styles: a paper-and-ink look that nods to Paper Golf. Mobile first,
+   because players register from their phones at the venue. */
+:root {
+  --paper: #f7f3ea;
+  --card: #fffdf8;
+  --ink: #1f2a24;
+  --muted: #6b7568;
+  --line: #ddd5c4;
+  --green: #2f6b45;
+  --green-dark: #24543a;
+  --amber: #b7791f;
+  --red: #b23a2e;
+  --radius: 10px;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+* { box-sizing: border-box; }
+/* The hidden attribute must win over display rules like .auth { display: grid }. */
+[hidden] { display: none !important; }
+body { margin: 0; }
+a { color: var(--green); }
+h1, h2, h3 { font-family: ui-serif, Georgia, serif; font-weight: 600; }
+.muted { color: var(--muted); }
+.error { color: var(--red); }
+
+button, .button {
+  display: inline-block; border: 0; border-radius: 8px; padding: 0.6rem 1rem;
+  background: var(--green); color: #fff; font: inherit; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+}
+button:hover, .button:hover { background: var(--green-dark); }
+button:disabled { opacity: 0.6; cursor: wait; }
+button.secondary, .button.secondary { background: transparent; color: var(--green); border: 1px solid var(--green); }
+button.small, .button.small { padding: 0.3rem 0.65rem; font-size: 0.85rem; }
+
+input, select {
+  width: 100%; padding: 0.55rem 0.6rem; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; font: inherit;
+}
+label { display: grid; gap: 0.3rem; font-size: 0.9rem; font-weight: 500; }
+
+/* Sign-in */
+.auth { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
+.auth-card { width: min(380px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 2rem; }
+.auth-card h1 { margin: 0; font-size: 2rem; }
+.auth-card form { display: grid; gap: 0.9rem; margin: 1.25rem 0 1rem; }
+
+/* App shell */
+.topbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem;
+  padding: 0.75rem 1rem; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.brand { font-family: ui-serif, Georgia, serif; font-size: 1.3rem; }
+nav { display: flex; gap: 1rem; flex: 1; }
+nav a { text-decoration: none; color: var(--muted); font-weight: 500; padding: 0.25rem 0; }
+nav a.active { color: var(--ink); border-bottom: 2px solid var(--green); }
+.who { color: var(--muted); font-size: 0.9rem; }
+.view { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+
+/* Catalog cards */
+.cards { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; display: grid; gap: 0.5rem; }
+.card header { display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; }
+.card h3 { margin: 0; }
+.card dl { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; margin: 0; font-size: 0.9rem; }
+.card dt { color: var(--muted); }
+.card dd { margin: 0; }
+.card footer { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+
+.badge { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 999px; background: #ece6d8; white-space: nowrap; font-weight: 600; }
+.badge-open, .badge-paid { background: #dcefe2; color: var(--green-dark); }
+.badge-in_progress, .badge-pending_payment, .badge-withdrawing, .badge-refund_due { background: #f6e7c8; color: #7a4f0e; }
+.badge-completed, .badge-refunded, .badge-withdrawn, .badge-released { background: #e7e3db; color: var(--muted); }
+
+/* Tables and panels */
+table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--line); }
+th { background: #f0eadc; font-weight: 600; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; overflow-x: auto; }
+.panel > h3 { margin-top: 0; }
+.grid-form { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); align-items: end; }
+.inline-form { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.inline-form select { width: auto; min-width: 160px; }
+
+/* Bracket */
+.bracket { display: flex; gap: 1.25rem; overflow-x: auto; padding: 0.5rem 0 1rem; }
+.bracket.rr { flex-wrap: wrap; }
+.round { min-width: 210px; display: flex; flex-direction: column; justify-content: space-around; gap: 0.75rem; }
+.round h4 { margin: 0 0 0.25rem; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.match { background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.match.bye { opacity: 0.75; }
+.slot { display: flex; justify-content: space-between; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
+.slot:last-of-type { border-bottom: 0; }
+.slot.winner { font-weight: 700; background: #eef6f0; }
+.score { font-variant-numeric: tabular-nums; }
+.score-form { display: flex; gap: 0.35rem; padding: 0.4rem; background: #f6f1e6; border-top: 1px solid var(--line); }
+.score-form input { padding: 0.3rem; width: 4.2rem; }
+.champion { font-size: 1.1rem; padding: 0.6rem 0.9rem; background: #dcefe2; border-radius: 8px; display: inline-block; }
+.standings { margin-bottom: 1rem; }
+
+/* Payment dialog */
+dialog { border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem; width: min(460px, 94vw); background: var(--card); }
+dialog::backdrop { background: rgba(31, 42, 36, 0.45); }
+dialog h3 { margin-top: 0; }
+#payment-element { margin: 1rem 0; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+/* Toast */
+.toast {
+  position: fixed; left: 50%; bottom: 1rem; transform: translate(-50%, 150%);
+  background: var(--ink); color: #fff; padding: 0.7rem 1rem; border-radius: 8px;
+  max-width: min(520px, 92vw); transition: transform 0.25s ease; z-index: 10;
+}
+.toast.show { transform: translate(-50%, 0); }
+.toast-error { background: var(--red); }
+.toast-success { background: var(--green-dark); }
+
+@media (max-width: 640px) {
+  .who { display: none; }
+  nav { order: 3; flex-basis: 100%; }
+}

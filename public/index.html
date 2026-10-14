@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TLMS · Tournament & League Management</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Stripe.js must be loaded from js.stripe.com (PCI requirement). -->
+  <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+  <!-- Signed-out screen -->
+  <main id="auth-screen" class="auth">
+    <div class="auth-card">
+      <h1>TLMS</h1>
+      <p class="muted">Tournament &amp; League Management</p>
+      <form id="auth-form">
+        <label id="name-row" hidden>Display name <input name="displayName" autocomplete="name"></label>
+        <label>Email <input name="email" type="email" required autocomplete="email"></label>
+        <label>Password <input name="password" type="password" required minlength="6" autocomplete="current-password"></label>
+        <button type="submit">Sign in</button>
+      </form>
+      <a href="#" id="toggle-mode">New here? Create an account</a>
+    </div>
+  </main>
+
+  <!-- Signed-in screen -->
+  <div id="app-screen" hidden>
+    <header class="topbar">
+      <strong class="brand">TLMS</strong>
+      <nav>
+        <a href="#/events" data-page="events">Tournaments</a>
+        <a href="#/my" data-page="my">My registrations</a>
+        <a href="#/admin" data-page="admin" id="admin-link" hidden>Admin</a>
+      </nav>
+      <span class="who" id="who"></span>
+      <button id="sign-out" class="secondary small">Sign out</button>
+    </header>
+    <main id="view" class="view"></main>
+  </div>
+
+  <!-- Payment dialog: the card form is rendered by Stripe in a secure frame. -->
+  <dialog id="pay-dialog">
+    <form id="pay-form">
+      <h3 id="pay-title">Entry fee</h3>
+      <div id="payment-element"></div>
+      <p id="pay-error" class="error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" id="pay-cancel" class="secondary">Cancel</button>
+        <button type="submit">Pay</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

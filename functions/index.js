@@ -31,8 +31,11 @@ const payments = createStripeAdapter({
 
 // Serve the same app at /api/v1/... (through the Hosting rewrite) and at
 // /v1/... (when calling the function URL directly, e.g. for Stripe webhooks).
+// (Two separate mounts: Express 5 does not match '/' inside an array mount.)
+const app = createApp({ db, auth: getAuth(), payments });
 const server = express();
-server.use(['/api', '/'], createApp({ db, auth: getAuth(), payments }));
+server.use('/api', app);
+server.use(app);
 
 exports.api = onRequest(server);
 
