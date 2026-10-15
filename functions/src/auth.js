@@ -26,6 +26,9 @@ function requireUser(auth) {
         name: decoded.name || decoded.email || 'Player',
         email: decoded.email || null,
         admin: decoded.admin === true,
+        // Service account role for the scoring engine integration (design
+        // Table 2: results come from an administrator or the scoring engine).
+        scorer: decoded.scorer === true,
       };
       next();
     } catch (err) {
@@ -40,4 +43,10 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireUser, requireAdmin };
+/** Administrators or the scoring-engine service account. */
+function requireScorer(req, res, next) {
+  if (!req.user || !(req.user.admin || req.user.scorer)) return next(forbidden());
+  next();
+}
+
+module.exports = { requireUser, requireAdmin, requireScorer };

@@ -94,6 +94,7 @@ test.before(async () => {
   await new Promise((resolve) => { server = app.listen(0, resolve); });
   base = `http://127.0.0.1:${server.address().port}`;
   tokens.admin = await makeUser('admin@venue.test', { admin: true });
+  tokens.scorer = await makeUser('scorer@venue.test', { scorer: true });
   for (const name of ['alice', 'bob', 'carol', 'dave', 'erin', 'frank', 'gina', 'hank']) {
     tokens[name] = await makeUser(`${name}@venue.test`);
   }
@@ -395,4 +396,56 @@ test('a payment that lands after its seat was released and the event filled is r
 
   await sendWebhook('charge.refunded', { id: 'ch_test_2', payment_intent: hank.paymentReference });
   assert.equal((await getReg(id, 'hank')).paymentStatus, 'refunded');
+});
+
+// --- Paper Golf scoring adapter --------------------------------------------
+
+const pgRound = (perHole) => ({ score: perHole * 18, holeScores: Array(18).fill(perHole), initials: 'TST', mode: 'random' });
+
+async function startBracket(players, overrides) {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody(overrides))).body.id;
+  for (const p of players) {
+    await call('POST', '/registrations', p, { tournamentId: id });
+    await markPaid(id, p);
+  }
+  await call('POST', `/tournaments/${id}/close`, 'admin');
+  return id;
+}
+
+test('Paper Golf rounds from both players decide the match (lower total wins)', flow, async () => {
+  const id = await startBracket(['alice', 'bob']);
+  const path = `/tournaments/${id}/matches/R1-M0/paper-golf`;
+
+  // Players cannot submit rounds; only admins or the scoring-engine account.
+  assert.equal((await call('POST', path, 'alice', { playerId: tokens.alice.uid, round: pgRound(4) })).status, 403);
+  // Rounds the game would reject are rejected here too.
+  const bad = await call('POST', path, 'scorer', { playerId: tokens.alice.uid, round: { score: 60, holeScores: Array(18).fill(4) } });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /does not match/);
+  // Someone not in the match is refused.
+  assert.equal((await call('POST', path, 'scorer', { playerId: tokens.carol.uid, round: pgRound(4) })).status, 409);
+
+  const first = await call('POST', path, 'scorer', { playerId: tokens.bob.uid, round: pgRound(5) });
+  assert.equal(first.status, 202);
+  assert.equal(first.body.outcome, 'waiting_for_opponent');
+  assert.equal((await call('POST', path, 'scorer', { playerId: tokens.bob.uid, round: pgRound(4) })).status, 409, 'one round per player');
+
+  const second = await call('POST', path, 'admin', { playerId: tokens.alice.uid, round: pgRound(4) });
+  assert.equal(second.status, 200);
+  assert.equal(second.body.outcome, 'recorded');
+  assert.equal(second.body.championId, tokens.alice.uid); // 72 beats 90
+  const match = (await db.doc(`tournaments/${id}/matches/R1-M0`).get()).data();
+  assert.deepEqual([match.score1, match.score2], [72, 90]);
+});
+
+test('tied Paper Golf rounds in elimination play leave the match open for a playoff', flow, async () => {
+  const id = await startBracket(['carol', 'dave']);
+  const path = `/tournaments/${id}/matches/R1-M0/paper-golf`;
+  await call('POST', path, 'scorer', { playerId: tokens.carol.uid, round: pgRound(4) });
+  const tie = await call('POST', path, 'scorer', { playerId: tokens.dave.uid, round: pgRound(4) });
+  assert.equal(tie.body.outcome, 'tied');
+  assert.equal((await db.doc(`tournaments/${id}/matches/R1-M0`).get()).data().status, 'scheduled');
+  // The administrator enters the playoff result through the normal route.
+  const playoff = await call('POST', `/tournaments/${id}/matches/R1-M0/result`, 'admin', { score1: 3, score2: 4 });
+  assert.equal(playoff.body.status, 'completed');
 });

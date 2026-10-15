@@ -18,7 +18,7 @@ Functions), Stripe (test mode), an email provider, and the existing
 | Player portal and administrator dashboard (`public/`) | Implemented; first live run pending |
 | Stripe test-mode payments, signed webhook, withdrawal with refund, reconciliation | Implemented; tested with recorded Stripe responses, live check pending |
 | Email notifications | Not started |
-| Paper Golf scoring adapter | Not started |
+| Paper Golf scoring adapter | Implemented; unit and integration tested |
 
 This table is updated as each component is completed.
 
@@ -61,6 +61,9 @@ In the third, load the demo data:
 ```
 cd functions && npm run seed
 ```
+
+To simulate the Paper Golf engine reporting a match after an administrator
+has closed the Fall Classic roster, run `npm run test:scoring` (in `functions`).
 
 Then open http://localhost:5002 and sign in with an emulator-only test account:
 `player@venue.test` / `Password123` (player) or `admin@venue.test` /
@@ -112,6 +115,7 @@ All requests need `Authorization: Bearer <Firebase ID token>`.
 | `GET /v1/tournaments/:id/leaderboard` | Player | Bracket and champion, or round-robin standings |
 | `POST /v1/registrations/:id/withdraw` | Player (own) or Admin | Withdraw before the roster closes; refunds paid entries |
 | `POST /v1/webhooks/payment` | Stripe (signature) | Payment succeeded/failed/canceled and refund events |
+| `POST /v1/tournaments/:id/matches/:matchId/paper-golf` | Admin or scorer service account | Submit a player's Paper Golf round; when both are in, the lower total wins |
 | `POST /v1/admin/reconcile` | Admin | Run the pending-payment reconciliation now (also scheduled every 5 minutes) |
 
 ## Stripe setup (test mode)

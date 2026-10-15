@@ -6,11 +6,12 @@
     "node": "22"
   },
   "scripts": {
-    "test": "node --test \"bracket/test/*.test.js\"",
+    "test": "node --test \"bracket/test/*.test.js\" \"test/unit/*.test.js\"",
     "test:rules": "firebase emulators:exec --only firestore --project demo-tlms \"node --test test/rules.test.js\"",
     "test:api": "firebase emulators:exec --only auth,firestore --project demo-tlms \"node --test test/api.test.js\"",
     "test:all": "npm test && npm run test:rules && npm run test:api",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "test:scoring": "node scripts/simulate-paper-golf.js"
   },
   "dependencies": {
     "express": "^5.3.0",

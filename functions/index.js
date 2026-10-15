@@ -16,8 +16,7 @@ const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
-const express = require('express');
-const { createApp } = require('./src/app');
+const { createServer } = require('./src/server');
 const { createStripeAdapter } = require('./src/adapters/stripeAdapter');
 const { reconcilePending } = require('./src/payments');
 
@@ -29,13 +28,7 @@ const payments = createStripeAdapter({
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
 });
 
-// Serve the same app at /api/v1/... (through the Hosting rewrite) and at
-// /v1/... (when calling the function URL directly, e.g. for Stripe webhooks).
-// (Two separate mounts: Express 5 does not match '/' inside an array mount.)
-const app = createApp({ db, auth: getAuth(), payments });
-const server = express();
-server.use('/api', app);
-server.use(app);
+const server = createServer({ db, auth: getAuth(), payments });
 
 exports.api = onRequest(server);
 

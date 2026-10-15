@@ -13,7 +13,8 @@
  */
 const express = require('express');
 const { FieldValue, Timestamp } = require('firebase-admin/firestore');
-const { requireUser, requireAdmin } = require('./auth');
+const { requireUser, requireAdmin, requireScorer } = require('./auth');
+const paperGolf = require('./adapters/paperGolfAdapter');
 const { badRequest, notFound, conflict, errorHandler } = require('./errors');
 const { engine, toEngineSchedule, scheduleMetadata, changedMatches, isComplete, runEngine } = require('./schedule');
 const { forbidden } = require('./errors');
@@ -331,6 +332,83 @@ function createApp({ db, auth, payments }) {
           : engine.recordRoundRobinResult(schedule, req.params.matchId, score1, score2);
       });
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /v1/tournaments/:id/matches/:matchId/paper-golf
+  //   (administrator or scoring-engine service account)
+  //
+  // Paper Golf integration: each player in a match plays one Paper Golf
+  // round, submitted here in the game's own format. The first round is
+  // stored; when the opponent's round arrives, the two totals are recorded
+  // as the match result (lower wins) and the bracket advances. Storing the
+  // round and checking for the opponent's happen in one transaction, so two
+  // rounds arriving at once still produce exactly one result.
+  // -------------------------------------------------------------------------
+  v1.post('/tournaments/:id/matches/:matchId/paper-golf', requireScorer, async (req, res, next) => {
+    try {
+      const { playerId } = req.body || {};
+      if (typeof playerId !== 'string' || !playerId) throw badRequest('playerId is required');
+      let round;
+      try {
+        round = paperGolf.validateRound(req.body.round);
+      } catch (err) {
+        throw badRequest(`Invalid Paper Golf round: ${err.message}`);
+      }
+
+      const tRef = db.collection('tournaments').doc(req.params.id);
+      const mRef = tRef.collection('matches').doc(req.params.matchId);
+      const roundsRef = tRef.collection('paperGolfRounds');
+
+      const scores = await db.runTransaction(async (tx) => {
+        const [tSnap, mSnap] = await Promise.all([tx.get(tRef), tx.get(mRef)]);
+        if (!tSnap.exists) throw notFound('Tournament not found');
+        if (!mSnap.exists) throw notFound('Match not found');
+        if (tSnap.data().status !== 'in_progress') throw conflict(`Tournament is ${tSnap.data().status}`);
+        const match = mSnap.data();
+        if (match.status !== 'scheduled') throw conflict(`Match is ${match.status}`);
+        if (![match.player1Id, match.player2Id].includes(playerId)) {
+          throw conflict('That player is not in this match');
+        }
+        const opponentId = playerId === match.player1Id ? match.player2Id : match.player1Id;
+        const [mine, theirs] = await Promise.all([
+          tx.get(roundsRef.doc(`${match.id}_${playerId}`)),
+          tx.get(roundsRef.doc(`${match.id}_${opponentId}`)),
+        ]);
+        if (mine.exists) throw conflict('This player has already submitted a round for this match');
+
+        tx.create(roundsRef.doc(`${match.id}_${playerId}`), {
+          ...round,
+          matchId: match.id,
+          playerId,
+          submittedBy: req.user.uid,
+          submittedAt: FieldValue.serverTimestamp(),
+        });
+        const rounds = { [playerId]: round };
+        if (theirs.exists) rounds[opponentId] = theirs.data();
+        return paperGolf.resultFromRounds(match, rounds);
+      });
+
+      if (!scores) {
+        return res.status(202).json({ outcome: 'waiting_for_opponent' });
+      }
+      if (scores.score1 === scores.score2) {
+        const t = (await tRef.get()).data();
+        if (t.format === 'single_elimination') {
+          // Elimination needs a winner: leave the match open for an
+          // administrator to enter the playoff result.
+          return res.json({ outcome: 'tied', message: 'Both rounds tied; enter the playoff result manually', ...scores });
+        }
+      }
+      const result = await updateSchedule(db, req.params.id, (schedule) =>
+        schedule.format === 'single_elimination'
+          ? engine.recordResult(schedule, req.params.matchId, scores.score1, scores.score2)
+          : engine.recordRoundRobinResult(schedule, req.params.matchId, scores.score1, scores.score2)
+      );
+      res.json({ outcome: 'recorded', ...scores, ...result });
     } catch (err) {
       next(err);
     }
