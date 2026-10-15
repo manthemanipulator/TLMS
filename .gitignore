@@ -16,3 +16,4 @@ emulator-data/
 
 # Leftover temp files from file-system sandboxes
 .fuse_hidden*
+stripe-listen.log

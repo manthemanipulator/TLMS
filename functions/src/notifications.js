@@ -14,6 +14,11 @@
 const { FieldValue } = require('firebase-admin/firestore');
 
 const money = (cents) => (cents ? `$${(cents / 100).toFixed(2)}` : 'Free');
+/** "2026-10-18" -> "Sunday, October 18, 2026" (formatted in UTC so the date never shifts). */
+const longDate = (iso) =>
+  new Date(`${String(iso).slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  });
 
 async function claimAndLoad(db, registrationId, flag) {
   const rRef = db.collection('registrations').doc(registrationId);
@@ -48,10 +53,12 @@ async function sendRegistrationReceipt(db, mailer, registrationId) {
     `Hi ${player.name || 'there'},`,
     '',
     `You're registered for ${t.name}.`,
-    `Date: ${t.date}${t.venue ? ` at ${t.venue}` : ''}`,
+    `Date: ${longDate(t.date)}${t.venue ? ` at ${t.venue}` : ''}`,
     `Entry fee: ${money(t.entryFeeCents)}${reg.paymentReference && reg.paymentReference !== 'seeded' ? ` (payment ${reg.paymentReference})` : ''}`,
     '',
-    'You can withdraw for a full refund until the roster closes.',
+    t.entryFeeCents
+      ? 'You can withdraw for a full refund until the roster closes.'
+      : 'You can withdraw until the roster closes.',
   ];
   return send(mailer, {
     to: player.email,

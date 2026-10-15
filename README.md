@@ -41,35 +41,30 @@ tested.
 
 ## Running the app locally
 
-You need three terminals. In the first, start Stripe webhook forwarding and
-copy the `whsec_...` secret it prints into `functions/.env` as
-`STRIPE_WEBHOOK_SECRET`:
+Start everything with one command from the project root:
 
 ```
-stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled,charge.refunded \
-  --forward-to localhost:5001/demo-tlms/us-central1/api/v1/webhooks/payment
+./dev.sh
 ```
 
-In the second, start the emulators from the project root:
-
-```
-firebase emulators:start
-```
-
-In the third, load the demo data:
+It clears leftover emulators, writes the Stripe CLI's webhook secret into
+`functions/.env`, starts Stripe webhook forwarding in the background (output
+in `stripe-listen.log`), and starts the emulators with data kept between runs.
+Press Ctrl+C once to stop everything. The first time (or after clearing
+data), load the demo data from a second terminal:
 
 ```
 cd functions && npm run seed
 ```
-
-To simulate the Paper Golf engine reporting a match after an administrator
-has closed the Fall Classic roster, run `npm run test:scoring` (in `functions`).
 
 Then open http://localhost:5002 and sign in with an emulator-only test account:
 `player@venue.test` / `Password123` (player) or `admin@venue.test` /
 `AdminPassword123` (administrator). Pay with Stripe's test card
 `4242 4242 4242 4242`, any future expiry and any CVC. The Emulator Suite UI
 is at http://localhost:4000.
+
+To simulate the Paper Golf engine reporting a match after an administrator
+has closed the Fall Classic roster, run `npm run test:scoring` (in `functions`).
 
 Front-end structure (`public/js`): `models/` (Firebase setup and the API
 client), `views/` (rendering helpers), and `controllers/` (authentication,
