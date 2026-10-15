@@ -8,6 +8,9 @@ standings. It integrates Firebase (Authentication, Cloud Firestore, Cloud
 Functions), Stripe (test mode), an email provider, and the existing
 [Paper Golf](https://github.com/manthemanipulator/Paper-Golf) scoring engine.
 
+The operation guide and status report for the beta are in
+[`docs/operation.docx`](docs/operation.docx).
+
 ## Current status
 
 | Component | Status |

@@ -20,7 +20,8 @@ if command -v stripe >/dev/null; then
   echo "• Updating the Stripe webhook secret in functions/.env..."
   SECRET=$(stripe listen --print-secret --events "$EVENTS")
   if grep -q '^STRIPE_WEBHOOK_SECRET=' functions/.env; then
-    sed -i '' "s|^STRIPE_WEBHOOK_SECRET=.*|STRIPE_WEBHOOK_SECRET=$SECRET|" functions/.env
+    # -i.bak works with both macOS (BSD) and Linux (GNU) sed.
+    sed -i.bak "s|^STRIPE_WEBHOOK_SECRET=.*|STRIPE_WEBHOOK_SECRET=$SECRET|" functions/.env && rm -f functions/.env.bak
   else
     printf '\nSTRIPE_WEBHOOK_SECRET=%s\n' "$SECRET" >> functions/.env
   fi
