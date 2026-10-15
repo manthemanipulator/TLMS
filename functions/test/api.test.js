@@ -29,6 +29,22 @@ const payments = createStripeAdapter({ secretKey: 'sk_test_fake', webhookSecret:
 const signer = new Stripe('sk_test_fake');
 let eventCounter = 0;
 
+// Records emails instead of sending them; can be told to fail.
+const mailbox = {
+  sent: [],
+  failNext: false,
+  async send(msg) {
+    if (this.failNext) {
+      this.failNext = false;
+      throw new Error('simulated email outage');
+    }
+    this.sent.push(msg);
+    return { id: `email_${this.sent.length}` };
+  },
+};
+const mailTo = (who, subjectPattern) =>
+  mailbox.sent.filter((m) => m.to === `${who}@venue.test` && subjectPattern.test(m.subject));
+
 let server;
 let base;
 const tokens = {};
@@ -90,7 +106,7 @@ const tournamentBody = (overrides = {}) => ({
 });
 
 test.before(async () => {
-  const app = createApp({ db, auth, payments });
+  const app = createApp({ db, auth, payments, mailer: mailbox });
   await new Promise((resolve) => { server = app.listen(0, resolve); });
   base = `http://127.0.0.1:${server.address().port}`;
   tokens.admin = await makeUser('admin@venue.test', { admin: true });
@@ -448,4 +464,45 @@ test('tied Paper Golf rounds in elimination play leave the match open for a play
   // The administrator enters the playoff result through the normal route.
   const playoff = await call('POST', `/tournaments/${id}/matches/R1-M0/result`, 'admin', { score1: 3, score2: 4 });
   assert.equal(playoff.body.status, 'completed');
+});
+
+// --- Email notifications ----------------------------------------------------
+
+test('a confirmed payment sends exactly one receipt, even if the webhook repeats', flow, async () => {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody({ name: 'Receipt Cup' }))).body.id;
+  await call('POST', '/registrations', 'erin', { tournamentId: id });
+  assert.equal(mailTo('erin', /Receipt Cup/).length, 0, 'no receipt before payment');
+  const reg = await getReg(id, 'erin');
+  fakeStripe.intents.get(reg.paymentReference).status = 'succeeded';
+  const obj = { id: reg.paymentReference, metadata: { registrationId: regId(id, 'erin') } };
+  await sendWebhook('payment_intent.succeeded', obj);
+  await sendWebhook('payment_intent.succeeded', obj); // different event ID, same payment
+  const receipts = mailTo('erin', /Registration confirmed: Receipt Cup/);
+  assert.equal(receipts.length, 1);
+  assert.match(receipts[0].text, /\$15\.00/);
+});
+
+test('free registrations get a receipt immediately', flow, async () => {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody({ name: 'Free Night', entryFeeCents: 0 }))).body.id;
+  await call('POST', '/registrations', 'frank', { tournamentId: id });
+  assert.equal(mailTo('frank', /Registration confirmed: Free Night/).length, 1);
+});
+
+test('a completed refund sends a refund confirmation', flow, async () => {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody({ name: 'Refund Open' }))).body.id;
+  await call('POST', '/registrations', 'gina', { tournamentId: id });
+  await markPaid(id, 'gina');
+  await call('POST', `/registrations/${regId(id, 'gina')}/withdraw`, 'gina');
+  assert.equal(mailTo('gina', /Refund processed/).length, 0, 'not until Stripe confirms');
+  const reg = await getReg(id, 'gina');
+  await sendWebhook('charge.refunded', { id: 'ch_mail_1', payment_intent: reg.paymentReference });
+  assert.equal(mailTo('gina', /Refund processed: Refund Open/).length, 1);
+});
+
+test('an email outage never blocks a registration', flow, async () => {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody({ name: 'Outage Open' }))).body.id;
+  await call('POST', '/registrations', 'hank', { tournamentId: id });
+  mailbox.failNext = true;
+  await markPaid(id, 'hank'); // asserts the webhook still returns 200
+  assert.equal((await getReg(id, 'hank')).paymentStatus, 'paid');
 });

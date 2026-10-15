@@ -15,6 +15,8 @@ const express = require('express');
 const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { requireUser, requireAdmin, requireScorer } = require('./auth');
 const paperGolf = require('./adapters/paperGolfAdapter');
+const { createLogMailer } = require('./adapters/emailAdapter');
+const { sendRegistrationReceipt, sendRefundConfirmation } = require('./notifications');
 const { badRequest, notFound, conflict, errorHandler } = require('./errors');
 const { engine, toEngineSchedule, scheduleMetadata, changedMatches, isComplete, runEngine } = require('./schedule');
 const { forbidden } = require('./errors');
@@ -27,7 +29,7 @@ const SEAT_HOLD_MINUTES = 15;
 // Firestore allows at most 500 writes per batch.
 const BATCH_LIMIT = 450;
 
-function createApp({ db, auth, payments }) {
+function createApp({ db, auth, payments, mailer = createLogMailer() }) {
   const app = express();
 
   // -------------------------------------------------------------------------
@@ -45,7 +47,7 @@ function createApp({ db, auth, payments }) {
         return res.json({ received: true, duplicate: true });
       }
       try {
-        await handlePaymentEvent(db, payments, event);
+        await handlePaymentEvent(db, payments, event, mailer);
       } catch (err) {
         // Un-claim so Stripe's automatic retry can process it again.
         await db.collection('webhookEvents').doc(event.id).delete();
@@ -166,6 +168,7 @@ function createApp({ db, auth, payments }) {
       });
 
       if (free) {
+        await sendRegistrationReceipt(db, mailer, rRef.id);
         return res.status(201).json({ registrationId: rRef.id, paymentStatus: 'paid' });
       }
 
@@ -256,7 +259,7 @@ function createApp({ db, auth, payments }) {
   // -------------------------------------------------------------------------
   v1.post('/admin/reconcile', requireAdmin, async (req, res, next) => {
     try {
-      res.json(await reconcilePending(db, payments));
+      res.json(await reconcilePending(db, payments, { mailer }));
     } catch (err) {
       next(err);
     }
@@ -488,13 +491,14 @@ function rawBody(req, res, next) {
 }
 
 /** Applies a verified Stripe event to the matching registration. */
-async function handlePaymentEvent(db, payments, event) {
+async function handlePaymentEvent(db, payments, event, mailer) {
   const obj = event.data.object;
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const registrationId = obj.metadata?.registrationId;
       if (!registrationId) return;
       const status = await confirmPayment(db, registrationId, obj.id);
+      if (status === 'paid') await sendRegistrationReceipt(db, mailer, registrationId);
       if (status === 'refund_due') {
         const reg = (await db.collection('registrations').doc(registrationId).get()).data();
         await payments.refund({ paymentIntentId: obj.id, registrationId, attempt: reg.attempt || 1 });
@@ -511,7 +515,10 @@ async function handlePaymentEvent(db, payments, event) {
       // Look the registration up by its PaymentIntent, which every charge
       // created from a PaymentIntent carries.
       const snap = await db.collection('registrations').where('paymentReference', '==', obj.payment_intent).limit(1).get();
-      if (!snap.empty) await completeRefund(db, snap.docs[0].id);
+      if (!snap.empty) {
+        const status = await completeRefund(db, snap.docs[0].id);
+        if (status === 'refunded') await sendRefundConfirmation(db, mailer, snap.docs[0].id);
+      }
       return;
     }
     default:

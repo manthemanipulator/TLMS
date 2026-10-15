@@ -19,6 +19,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { createServer } = require('./src/server');
 const { createStripeAdapter } = require('./src/adapters/stripeAdapter');
 const { reconcilePending } = require('./src/payments');
+const { createResendMailer, createLogMailer } = require('./src/adapters/emailAdapter');
 
 initializeApp();
 const db = getFirestore();
@@ -28,11 +29,22 @@ const payments = createStripeAdapter({
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
 });
 
-const server = createServer({ db, auth: getAuth(), payments });
+// Email: Resend when a key is configured, otherwise messages are only logged.
+// EMAIL_REDIRECT_TO (optional) sends every message to one address, for
+// testing before a sending domain is verified with the provider.
+const mailer = process.env.RESEND_API_KEY
+  ? createResendMailer({
+      apiKey: process.env.RESEND_API_KEY,
+      from: process.env.EMAIL_FROM || 'TLMS <onboarding@resend.dev>',
+      redirectTo: process.env.EMAIL_REDIRECT_TO || null,
+    })
+  : createLogMailer();
+
+const server = createServer({ db, auth: getAuth(), payments, mailer });
 
 exports.api = onRequest(server);
 
 exports.reconcilePayments = onSchedule('every 5 minutes', async () => {
-  const summary = await reconcilePending(db, payments);
+  const summary = await reconcilePending(db, payments, { mailer });
   console.log('Reconciliation summary', summary);
 });

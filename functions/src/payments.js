@@ -16,6 +16,7 @@
  *                    an automatic refund has been requested
  */
 const { FieldValue } = require('firebase-admin/firestore');
+const { sendRegistrationReceipt } = require('./notifications');
 
 const SEAT_RELEASED = ['refunded', 'released', 'withdrawn', 'refund_due'];
 
@@ -121,7 +122,7 @@ async function claimEvent(db, eventId, type) {
  * or lost webhook therefore cannot cost a paying player their seat, and an
  * abandoned checkout cannot hold a seat forever.
  */
-async function reconcilePending(db, payments, now = Date.now()) {
+async function reconcilePending(db, payments, { now = Date.now(), mailer } = {}) {
   const snap = await db.collection('registrations').where('paymentStatus', '==', 'pending_payment').get();
   const summary = { checked: 0, confirmed: 0, released: 0, stillProcessing: 0, refundsIssued: 0 };
 
@@ -143,6 +144,7 @@ async function reconcilePending(db, payments, now = Date.now()) {
         summary.refundsIssued++;
       } else {
         summary.confirmed++;
+        if (mailer) await sendRegistrationReceipt(db, mailer, doc.id);
       }
     } else if (intent.status === 'processing') {
       summary.stillProcessing++; // Bank transfer in flight; check next run.

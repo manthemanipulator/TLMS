@@ -17,7 +17,7 @@ Functions), Stripe (test mode), an email provider, and the existing
 | Cloud Functions API (tournaments, registration, close roster, results, swap, leaderboard) | Implemented and integration tested |
 | Player portal and administrator dashboard (`public/`) | Implemented; first live run pending |
 | Stripe test-mode payments, signed webhook, withdrawal with refund, reconciliation | Implemented; tested with recorded Stripe responses, live check pending |
-| Email notifications | Not started |
+| Email receipts and refund confirmations (Resend adapter) | Implemented; tested with a recording mailer |
 | Paper Golf scoring adapter | Implemented; unit and integration tested |
 
 This table is updated as each component is completed.
@@ -125,7 +125,15 @@ Create `functions/.env` (never committed):
 ```
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...   # printed by `stripe listen`
+RESEND_API_KEY=re_...             # optional; without it emails are only logged
+EMAIL_REDIRECT_TO=you@example.com # optional; send every email to this address
 ```
+
+Email goes through an adapter (`src/adapters/emailAdapter.js`). The design
+named SendGrid, but SendGrid retired its free plan in 2025, so the adapter
+uses Resend; no other code depends on the provider. Until a sending domain is
+verified, Resend only delivers to the account owner's address, which is what
+`EMAIL_REDIRECT_TO` is for.
 
 Every charge and refund uses an idempotency key built from the registration
 ID and attempt number, and webhook events are recorded by event ID, so
