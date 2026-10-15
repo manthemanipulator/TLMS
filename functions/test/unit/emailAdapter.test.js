@@ -47,3 +47,13 @@ test('without an API key, the log mailer records instead of sending', async () =
   await createLogMailer((l) => lines.push(l)).send({ to: 'a@b.test', subject: 'Receipt' });
   assert.match(lines[0], /not sent.*a@b\.test.*Receipt/);
 });
+
+// Reminder timing window (pure date arithmetic, no Firestore needed).
+const { daysUntil } = require('../../src/reminders');
+test('reminder window counts whole days from today', () => {
+  const now = Date.parse('2026-10-14T23:30:00Z');
+  assert.equal(daysUntil('2026-10-14', now), 0);
+  assert.equal(daysUntil('2026-10-15', now), 1);
+  assert.equal(daysUntil('2026-10-13', now), -1);
+  assert.equal(daysUntil('2026-10-24', now), 10);
+});

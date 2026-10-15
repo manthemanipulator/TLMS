@@ -506,3 +506,42 @@ test('an email outage never blocks a registration', flow, async () => {
   await markPaid(id, 'hank'); // asserts the webhook still returns 200
   assert.equal((await getReg(id, 'hank')).paymentStatus, 'paid');
 });
+
+// --- Match reminders ---------------------------------------------------------
+
+test('match reminders go to both players of each ready match, once', flow, async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  // Three players: the top seed has a bye, so only one match is ready to play.
+  const id = await startBracket(['alice', 'bob', 'carol'], { name: 'Reminder Classic', date: today });
+  const later = await startBracket(['dave', 'erin'], { name: 'Next Month Open', date: future(30).slice(0, 10) });
+  assert.ok(later);
+
+  assert.equal((await call('POST', '/admin/reminders', 'bob')).status, 403);
+  const before = mailbox.sent.length;
+  const first = await call('POST', '/admin/reminders', 'admin');
+  assert.equal(first.status, 200);
+  const reminders = mailbox.sent.slice(before).filter((m) => /Match reminder: Reminder Classic/.test(m.subject));
+  assert.deepEqual(reminders.map((m) => m.to).sort(), ['bob@venue.test', 'carol@venue.test']);
+  assert.match(reminders.find((m) => m.to === 'bob@venue.test').text, /play .* today/);
+  assert.equal(mailbox.sent.slice(before).filter((m) => /Next Month Open/.test(m.subject)).length, 0, 'events a month out are skipped');
+
+  const again = await call('POST', '/admin/reminders', 'admin');
+  assert.equal(mailbox.sent.slice(before).filter((m) => /Reminder Classic/.test(m.subject)).length, 2, 'no duplicates');
+  assert.ok(again.body.alreadySent >= 2);
+});
+
+test('played matches get no reminder, and a failed send is retried next run', flow, async () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const id = await startBracket(['frank', 'gina', 'hank', 'alice'], { name: 'Retry Cup', date: today });
+  // Seeds follow registration order: R1-M0 is frank (1) vs alice (4) and
+  // R1-M1 is gina (2) vs hank (3). Play R1-M0 so only R1-M1 is still ready.
+  await call('POST', `/tournaments/${id}/matches/R1-M0/result`, 'admin', { score1: 70, score2: 72 });
+  mailbox.failNext = true;
+  const before = mailbox.sent.length;
+  const first = await call('POST', '/admin/reminders', 'admin');
+  assert.equal(first.body.failed, 1);
+  await call('POST', '/admin/reminders', 'admin');
+  const retry = mailbox.sent.slice(before).filter((m) => /Retry Cup/.test(m.subject));
+  assert.equal(retry.length, 2, 'only the unplayed match, both players, after the retry');
+  assert.deepEqual(retry.map((m) => m.to).sort(), ['gina@venue.test', 'hank@venue.test']);
+});

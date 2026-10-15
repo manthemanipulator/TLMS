@@ -6,6 +6,8 @@
  *   api                 the REST interface (Hosting rewrites /api/** to it)
  *   reconcilePayments   scheduled every 5 minutes: settles registrations whose
  *                       seat hold expired, using Stripe's own payment status
+ *   matchReminders      scheduled hourly: emails players about matches today
+ *                       or tomorrow (each reminder is sent once)
  *
  * Stripe credentials come from environment variables, which the Firebase
  * CLI loads from functions/.env (excluded from source control). For
@@ -19,6 +21,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { createServer } = require('./src/server');
 const { createStripeAdapter } = require('./src/adapters/stripeAdapter');
 const { reconcilePending } = require('./src/payments');
+const { sendMatchReminders } = require('./src/reminders');
 const { createResendMailer, createLogMailer } = require('./src/adapters/emailAdapter');
 
 initializeApp();
@@ -47,4 +50,9 @@ exports.api = onRequest(server);
 exports.reconcilePayments = onSchedule('every 5 minutes', async () => {
   const summary = await reconcilePending(db, payments, { mailer });
   console.log('Reconciliation summary', summary);
+});
+
+exports.matchReminders = onSchedule('every 60 minutes', async () => {
+  const summary = await sendMatchReminders(db, mailer);
+  console.log('Reminder summary', summary);
 });

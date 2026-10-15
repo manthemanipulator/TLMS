@@ -29,9 +29,12 @@ export async function showAdmin(root) {
       <div id="admin-list">Loading…</div>
     </section>
     <section class="panel">
-      <h3>Payments</h3>
-      <p class="muted">Settles registrations whose 15-minute hold expired, using Stripe's record of each payment. Runs automatically every 5 minutes in production.</p>
+      <h3>Scheduled jobs</h3>
+      <p class="muted">These run automatically in production. The local emulator does not run schedules, so they can be started here.</p>
+      <p><strong>Payment reconciliation</strong> (every 5 minutes): settles registrations whose 15-minute hold expired, using Stripe's record of each payment.</p>
       <button id="reconcile" class="secondary">Run reconciliation now</button>
+      <p><strong>Match reminders</strong> (hourly): emails both players in each ready match for events today or tomorrow. Each reminder is sent once.</p>
+      <button id="reminders" class="secondary">Send match reminders now</button>
       <pre id="reconcile-out" class="muted"></pre>
     </section>`;
 
@@ -60,6 +63,16 @@ export async function showAdmin(root) {
   document.getElementById('reconcile').addEventListener('click', async () => {
     try {
       document.getElementById('reconcile-out').textContent = JSON.stringify(await api.reconcile(), null, 2);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('reminders').addEventListener('click', async () => {
+    try {
+      const r = await api.sendReminders();
+      document.getElementById('reconcile-out').textContent = JSON.stringify(r, null, 2);
+      toast(`Reminders sent: ${r.sent}`, 'success');
     } catch (err) {
       toast(err.message, 'error');
     }

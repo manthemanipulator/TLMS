@@ -35,4 +35,5 @@ export const api = {
   swap: (id, playerA, playerB) => request('POST', `/tournaments/${id}/swap`, { playerA, playerB }),
   leaderboard: (id) => request('GET', `/tournaments/${id}/leaderboard`),
   reconcile: () => request('POST', '/admin/reconcile'),
+  sendReminders: () => request('POST', '/admin/reminders'),
 };

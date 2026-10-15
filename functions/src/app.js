@@ -17,6 +17,7 @@ const { requireUser, requireAdmin, requireScorer } = require('./auth');
 const paperGolf = require('./adapters/paperGolfAdapter');
 const { createLogMailer } = require('./adapters/emailAdapter');
 const { sendRegistrationReceipt, sendRefundConfirmation } = require('./notifications');
+const { sendMatchReminders } = require('./reminders');
 const { badRequest, notFound, conflict, errorHandler } = require('./errors');
 const { engine, toEngineSchedule, scheduleMetadata, changedMatches, isComplete, runEngine } = require('./schedule');
 const { forbidden } = require('./errors');
@@ -246,6 +247,20 @@ function createApp({ db, auth, payments, mailer = createLogMailer() }) {
         throw err;
       }
       res.json({ paymentStatus: 'withdrawing' });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /v1/admin/reminders  (administrator)
+  // Sends match reminders now. In production the same job runs every hour
+  // as a scheduled function; the emulator does not run schedules, so this
+  // endpoint (and `npm run send:reminders`) is how it is triggered locally.
+  // -------------------------------------------------------------------------
+  v1.post('/admin/reminders', requireAdmin, async (req, res, next) => {
+    try {
+      res.json(await sendMatchReminders(db, mailer));
     } catch (err) {
       next(err);
     }

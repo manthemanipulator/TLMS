@@ -79,6 +79,19 @@ async function main() {
       venue: 'Practice Green',
       prereg: paid.slice(2, 6),
     },
+    {
+      // Happens tomorrow, so match reminders can be tried right away:
+      // close the roster as admin, then run `npm run send:reminders`.
+      id: 'friday-match-play',
+      name: 'Friday Match Play',
+      format: 'single_elimination',
+      date: days(1).slice(0, 10),
+      registrationDeadline: days(0.5),
+      capacity: 8,
+      entryFeeCents: 0,
+      venue: 'Back Nine',
+      prereg: [paid[0], paid[1], paid[4], paid[5]],
+    },
   ];
 
   for (const { id, prereg, ...t } of tournaments) {
@@ -103,7 +116,7 @@ async function main() {
       });
     }
   }
-  console.log('Seeded: 1 admin, 7 players, 2 tournaments. Sign in at http://localhost:5002');
+  console.log('Seeded: 1 admin, 7 players, 3 tournaments. Sign in at http://localhost:5002');
 }
 
 main().then(() => process.exit(0)).catch((err) => {

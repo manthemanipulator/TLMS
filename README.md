@@ -17,7 +17,7 @@ Functions), Stripe (test mode), an email provider, and the existing
 | Cloud Functions API (tournaments, registration, close roster, results, swap, leaderboard) | Implemented and integration tested |
 | Player portal and administrator dashboard (`public/`) | Implemented; first live run pending |
 | Stripe test-mode payments, signed webhook, withdrawal with refund, reconciliation | Implemented; tested with recorded Stripe responses, live check pending |
-| Email receipts and refund confirmations (Resend adapter) | Implemented; tested with a recording mailer |
+| Email receipts, refund confirmations and match reminders (Resend adapter) | Implemented; tested with a recording mailer |
 | Paper Golf scoring adapter | Implemented; unit and integration tested |
 
 This table is updated as each component is completed.
@@ -111,6 +111,7 @@ All requests need `Authorization: Bearer <Firebase ID token>`.
 | `POST /v1/registrations/:id/withdraw` | Player (own) or Admin | Withdraw before the roster closes; refunds paid entries |
 | `POST /v1/webhooks/payment` | Stripe (signature) | Payment succeeded/failed/canceled and refund events |
 | `POST /v1/tournaments/:id/matches/:matchId/paper-golf` | Admin or scorer service account | Submit a player's Paper Golf round; when both are in, the lower total wins |
+| `POST /v1/admin/reminders` | Admin | Send match reminders now (also scheduled hourly); `npm run send:reminders` calls this |
 | `POST /v1/admin/reconcile` | Admin | Run the pending-payment reconciliation now (also scheduled every 5 minutes) |
 
 ## Stripe setup (test mode)
