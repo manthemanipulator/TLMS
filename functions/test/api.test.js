@@ -545,3 +545,31 @@ test('played matches get no reminder, and a failed send is retried next run', fl
   assert.equal(retry.length, 2, 'only the unplayed match, both players, after the retry');
   assert.deepEqual(retry.map((m) => m.to).sort(), ['gina@venue.test', 'hank@venue.test']);
 });
+
+// --- Concurrency ---------------------------------------------------------------
+
+test('two players racing for the last seat: exactly one gets it', flow, async () => {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody({ name: 'Last Seat Open', capacity: 2 }))).body.id;
+  await call('POST', '/registrations', 'alice', { tournamentId: id }); // one seat left
+  // Both requests are sent at the same moment; Firestore transactions serialize them.
+  const [bob, carol] = await Promise.all([
+    call('POST', '/registrations', 'bob', { tournamentId: id }),
+    call('POST', '/registrations', 'carol', { tournamentId: id }),
+  ]);
+  assert.deepEqual([bob.status, carol.status].sort(), [201, 409]);
+  const loser = bob.status === 409 ? bob : carol;
+  assert.match(loser.body.error, /full/);
+  assert.equal(await getCount(id), 2, 'capacity is never exceeded');
+  const regs = await db.collection('registrations').where('tournamentId', '==', id).get();
+  assert.equal(regs.size, 2, 'no extra registration document was created');
+});
+
+test('the same player submitting twice at once gets one registration', flow, async () => {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody({ name: 'Double Click Open' }))).body.id;
+  const results = await Promise.all([
+    call('POST', '/registrations', 'dave', { tournamentId: id }),
+    call('POST', '/registrations', 'dave', { tournamentId: id }),
+  ]);
+  assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
+  assert.equal(await getCount(id), 1);
+});
