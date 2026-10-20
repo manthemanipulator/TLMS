@@ -24,6 +24,15 @@ const { forbidden } = require('./errors');
 const { confirmPayment, releaseSeat, completeRefund, claimEvent, reconcilePending, SEAT_RELEASED } = require('./payments');
 
 const FORMATS = ['single_elimination', 'round_robin'];
+// Stripe event types the webhook handler acts on (see handlePaymentEvent).
+const HANDLED_EVENTS = new Set([
+  'payment_intent.succeeded',
+  'payment_intent.payment_failed',
+  'payment_intent.canceled',
+  'charge.refunded',
+  'charge.refund.updated',
+  'refund.updated',
+]);
 const MAX_PLAYERS = 128;
 // How long an unpaid registration holds a seat before it can be released.
 const SEAT_HOLD_MINUTES = 15;
@@ -44,6 +53,12 @@ function createApp({ db, auth, payments, mailer = createLogMailer() }) {
   app.post('/v1/webhooks/payment', rawBody, async (req, res, next) => {
     try {
       const event = payments.verifyWebhook(req.rawBody, req.get('Stripe-Signature'));
+      // Only events this server acts on are recorded as processed. Recording
+      // an ignored event would block a later resend of it (for example after
+      // a code change that starts handling that event type).
+      if (!HANDLED_EVENTS.has(event.type)) {
+        return res.json({ received: true, ignored: true });
+      }
       if (!(await claimEvent(db, event.id, event.type))) {
         return res.json({ received: true, duplicate: true });
       }
@@ -526,9 +541,15 @@ async function handlePaymentEvent(db, payments, event, mailer) {
       if (registrationId) await releaseSeat(db, registrationId);
       return;
     }
-    case 'charge.refunded': {
-      // Look the registration up by its PaymentIntent, which every charge
-      // created from a PaymentIntent carries.
+    case 'charge.refunded':
+    case 'charge.refund.updated':
+    case 'refund.updated': {
+      // Stripe reports refunds either on the charge (charge.refunded) or on
+      // the refund itself (charge.refund.updated / refund.updated). A refund
+      // object counts only once its status is "succeeded". Both objects carry
+      // the PaymentIntent, which is how the registration is found.
+      if (event.type !== 'charge.refunded' && obj.status !== 'succeeded') return;
+      if (!obj.payment_intent) return;
       const snap = await db.collection('registrations').where('paymentReference', '==', obj.payment_intent).limit(1).get();
       if (!snap.empty) {
         const status = await completeRefund(db, snap.docs[0].id);

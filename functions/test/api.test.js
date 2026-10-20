@@ -573,3 +573,26 @@ test('the same player submitting twice at once gets one registration', flow, asy
   assert.deepEqual(results.map((r) => r.status).sort(), [201, 409]);
   assert.equal(await getCount(id), 1);
 });
+
+test('a refund reported as charge.refund.updated completes only once it has succeeded', flow, async () => {
+  const id = (await call('POST', '/tournaments', 'admin', tournamentBody({ name: 'Refund Update Open' }))).body.id;
+  await call('POST', '/registrations', 'hank', { tournamentId: id });
+  await markPaid(id, 'hank');
+  await call('POST', `/registrations/${regId(id, 'hank')}/withdraw`, 'hank');
+  const reg = await getReg(id, 'hank');
+  await sendWebhook('charge.refund.updated', { id: 're_test_pending', status: 'pending', payment_intent: reg.paymentReference });
+  assert.equal((await getReg(id, 'hank')).paymentStatus, 'withdrawing', 'a pending refund changes nothing');
+  await sendWebhook('charge.refund.updated', { id: 're_test_done', status: 'succeeded', payment_intent: reg.paymentReference });
+  assert.equal((await getReg(id, 'hank')).paymentStatus, 'refunded');
+  assert.equal(await getCount(id), 0);
+  assert.equal(mailTo('hank', /Refund processed: Refund Update Open/).length, 1);
+});
+
+test('event types the server does not handle are acknowledged but not recorded', flow, async () => {
+  const first = await sendWebhook('customer.created', { id: 'cus_test_1' }, { id: 'evt_unhandled_1' });
+  const again = await sendWebhook('customer.created', { id: 'cus_test_1' }, { id: 'evt_unhandled_1' });
+  assert.equal(first.status, 200);
+  assert.equal(first.body.ignored, true);
+  assert.equal(again.body.ignored, true, 'a resend is not treated as a duplicate');
+  assert.equal((await db.doc('webhookEvents/evt_unhandled_1').get()).exists, false);
+});

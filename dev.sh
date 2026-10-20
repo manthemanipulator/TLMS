@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PORTS=":9099,8080,5001,5002,4000,4400,4500,9150"
-EVENTS="payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled,charge.refunded"
+EVENTS="payment_intent.succeeded,payment_intent.payment_failed,payment_intent.canceled,charge.refunded,charge.refund.updated"
 WEBHOOK_URL="localhost:5001/demo-tlms/us-central1/api/v1/webhooks/payment"
 
 echo "• Clearing leftover emulators..."

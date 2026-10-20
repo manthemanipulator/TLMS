@@ -37,17 +37,21 @@ const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
 initializeApp();
 const db = getFirestore();
 
+// Trim secret values: a pasted secret can carry a trailing newline or space,
+// which silently breaks Stripe signature checks.
+const secret = (param) => (param.value() || '').trim();
+
 let deps;
 /** Builds the adapters once per function instance, on first use. */
 function getDeps() {
   if (!deps) {
-    const resendKey = RESEND_API_KEY.value();
+    const resendKey = secret(RESEND_API_KEY);
     deps = {
       db,
       auth: getAuth(),
       payments: createStripeAdapter({
-        secretKey: STRIPE_SECRET_KEY.value(),
-        webhookSecret: STRIPE_WEBHOOK_SECRET.value(),
+        secretKey: secret(STRIPE_SECRET_KEY),
+        webhookSecret: secret(STRIPE_WEBHOOK_SECRET),
       }),
       // Email: Resend when a key is configured, otherwise messages are only
       // logged. EMAIL_REDIRECT_TO (optional) sends every message to one
