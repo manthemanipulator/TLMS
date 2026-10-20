@@ -17,3 +17,7 @@ emulator-data/
 # Leftover temp files from file-system sandboxes
 .fuse_hidden*
 stripe-listen.log
+
+# Emulator-only secrets (production uses Cloud Secret Manager)
+.secret.local
+*.bak

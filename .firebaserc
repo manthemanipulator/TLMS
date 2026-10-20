@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-tlms"
+    "default": "demo-tlms",
+    "prod": "tlms-venue"
   }
 }

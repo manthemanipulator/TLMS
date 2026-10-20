@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts the whole TLMS development stack in one terminal:
 #   1. stops any emulators left running from an earlier session
-#   2. writes the current Stripe CLI webhook secret into functions/.env
+#   2. writes the current Stripe CLI webhook secret into functions/.secret.local
 #   3. starts Stripe webhook forwarding in the background (log: stripe-listen.log)
 #   4. starts the Firebase emulators, keeping data between runs
 # Press Ctrl+C once to stop everything (data is saved on the way out).
@@ -17,13 +17,14 @@ lsof -ti "$PORTS" | xargs kill 2>/dev/null || true
 sleep 1
 
 if command -v stripe >/dev/null; then
-  echo "• Updating the Stripe webhook secret in functions/.env..."
+  echo "• Updating the Stripe webhook secret in functions/.secret.local..."
   SECRET=$(stripe listen --print-secret --events "$EVENTS")
-  if grep -q '^STRIPE_WEBHOOK_SECRET=' functions/.env; then
+  touch functions/.secret.local
+  if grep -q '^STRIPE_WEBHOOK_SECRET=' functions/.secret.local; then
     # -i.bak works with both macOS (BSD) and Linux (GNU) sed.
-    sed -i.bak "s|^STRIPE_WEBHOOK_SECRET=.*|STRIPE_WEBHOOK_SECRET=$SECRET|" functions/.env && rm -f functions/.env.bak
+    sed -i.bak "s|^STRIPE_WEBHOOK_SECRET=.*|STRIPE_WEBHOOK_SECRET=$SECRET|" functions/.secret.local && rm -f functions/.secret.local.bak
   else
-    printf '\nSTRIPE_WEBHOOK_SECRET=%s\n' "$SECRET" >> functions/.env
+    printf '\nSTRIPE_WEBHOOK_SECRET=%s\n' "$SECRET" >> functions/.secret.local
   fi
   echo "• Starting Stripe webhook forwarding (output in stripe-listen.log)..."
   stripe listen --events "$EVENTS" --forward-to "$WEBHOOK_URL" > stripe-listen.log 2>&1 &

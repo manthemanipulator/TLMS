@@ -13,19 +13,11 @@
  * It refuses to run unless it is pointed at the emulators, so it can never
  * write to a real Firebase project.
  */
-process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
-process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099';
+const { Timestamp } = require('firebase-admin/firestore');
 
-const { initializeApp } = require('firebase-admin/app');
-const { getFirestore, Timestamp } = require('firebase-admin/firestore');
-const { getAuth } = require('firebase-admin/auth');
-
-const PROJECT = 'demo-tlms';
-if (!PROJECT.startsWith('demo-')) throw new Error('Seed script only runs against demo projects');
-
-initializeApp({ projectId: PROJECT });
-const db = getFirestore();
-const auth = getAuth();
+let db;
+let auth;
+let passwords = { admin: 'AdminPassword123', player: 'Password123' };
 
 async function user(email, password, name, claims) {
   let record;
@@ -44,16 +36,18 @@ async function user(email, password, name, claims) {
 
 const days = (n) => new Date(Date.now() + n * 86400000).toISOString();
 
-async function main() {
-  const adminUid = await user('admin@venue.test', 'AdminPassword123', 'Venue Admin', { admin: true });
-  await user('player@venue.test', 'Password123', 'Sam Player');
+async function seed(options) {
+  ({ db, auth } = options);
+  if (options.passwords) passwords = options.passwords;
+  const adminUid = await user('admin@venue.test', passwords.admin, 'Venue Admin', { admin: true });
+  await user('player@venue.test', passwords.player, 'Sam Player');
 
   // Six players who are already registered and paid, so the administrator
   // can close a roster and play a bracket right away.
   const names = ['Avery Brooks', 'Jordan Lee', 'Riley Chen', 'Morgan Diaz', 'Casey Patel', 'Taylor Kim'];
   const paid = [];
   for (const [i, name] of names.entries()) {
-    paid.push(await user(`demo${i + 1}@venue.test`, 'Password123', name));
+    paid.push(await user(`demo${i + 1}@venue.test`, passwords.player, name));
   }
 
   const tournaments = [
@@ -116,10 +110,25 @@ async function main() {
       });
     }
   }
-  console.log('Seeded: 1 admin, 7 players, 3 tournaments. Sign in at http://localhost:5002');
 }
 
-main().then(() => process.exit(0)).catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+module.exports = { seed };
+
+// Run directly: seeds the local emulators (never a real project).
+if (require.main === module) {
+  process.env.FIRESTORE_EMULATOR_HOST ||= '127.0.0.1:8080';
+  process.env.FIREBASE_AUTH_EMULATOR_HOST ||= '127.0.0.1:9099';
+  const { initializeApp } = require('firebase-admin/app');
+  const { getFirestore } = require('firebase-admin/firestore');
+  const { getAuth } = require('firebase-admin/auth');
+  initializeApp({ projectId: 'demo-tlms' });
+  seed({ db: getFirestore(), auth: getAuth() })
+    .then(() => {
+      console.log('Seeded: 1 admin, 7 players, 3 tournaments. Sign in at http://localhost:5002');
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
+}
