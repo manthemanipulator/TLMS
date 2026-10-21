@@ -15,10 +15,16 @@ const { FieldValue } = require('firebase-admin/firestore');
 
 const DAY_MS = 86400000;
 
-/** Whole days from today (UTC) until a YYYY-MM-DD event date. */
-function daysUntil(isoDate, now) {
-  const startOfToday = Math.floor(now / DAY_MS) * DAY_MS;
-  return Math.round((Date.parse(`${String(isoDate).slice(0, 10)}T00:00:00Z`) - startOfToday) / DAY_MS);
+// Event dates are calendar days at the venue, so "today" and "tomorrow" are
+// judged in the venue's time zone, not UTC. Set VENUE_TIME_ZONE in
+// functions/.env to change it.
+const VENUE_TIME_ZONE = process.env.VENUE_TIME_ZONE || 'America/Los_Angeles';
+
+/** Whole days from today (in the given time zone) until a YYYY-MM-DD event date. */
+function daysUntil(isoDate, now, timeZone = VENUE_TIME_ZONE) {
+  // en-CA formats as YYYY-MM-DD, giving the calendar date in that zone.
+  const today = new Date(now).toLocaleDateString('en-CA', { timeZone });
+  return Math.round((Date.parse(`${String(isoDate).slice(0, 10)}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS);
 }
 
 const longDate = (iso) =>

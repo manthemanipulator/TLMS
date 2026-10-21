@@ -52,8 +52,16 @@ test('without an API key, the log mailer records instead of sending', async () =
 const { daysUntil } = require('../../src/reminders');
 test('reminder window counts whole days from today', () => {
   const now = Date.parse('2026-10-14T23:30:00Z');
-  assert.equal(daysUntil('2026-10-14', now), 0);
-  assert.equal(daysUntil('2026-10-15', now), 1);
-  assert.equal(daysUntil('2026-10-13', now), -1);
-  assert.equal(daysUntil('2026-10-24', now), 10);
+  assert.equal(daysUntil('2026-10-14', now, 'UTC'), 0);
+  assert.equal(daysUntil('2026-10-15', now, 'UTC'), 1);
+  assert.equal(daysUntil('2026-10-13', now, 'UTC'), -1);
+  assert.equal(daysUntil('2026-10-24', now, 'UTC'), 10);
+});
+
+test('reminder window uses the venue time zone, not UTC', () => {
+  // 00:30 UTC on Oct 21 is still 5:30 PM on Oct 20 in California.
+  const now = Date.parse('2026-10-21T00:30:00Z');
+  assert.equal(daysUntil('2026-10-21', now, 'America/Los_Angeles'), 1);
+  assert.equal(daysUntil('2026-10-23', now, 'America/Los_Angeles'), 3);
+  assert.equal(daysUntil('2026-10-23', now, 'UTC'), 2);
 });
