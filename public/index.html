@@ -4,9 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TLMS · Tournament & League Management</title>
+  <meta name="description" content="Register, pay, and follow brackets and standings for recreational golf and game tournaments.">
   <link rel="stylesheet" href="css/styles.css">
-  <!-- Stripe.js must be loaded from js.stripe.com (PCI requirement). -->
-  <script src="https://js.stripe.com/v3/"></script>
+  <!-- Stripe.js must be loaded from js.stripe.com (PCI requirement). It loads
+       asynchronously so it no longer delays the first paint of the page; the
+       payment form waits for it if a player opens checkout very quickly. -->
+  <link rel="preconnect" href="https://js.stripe.com">
+  <script id="stripe-js" src="https://js.stripe.com/v3/" async></script>
 </head>
 <body>
   <!-- Signed-out screen -->

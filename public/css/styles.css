@@ -4,7 +4,7 @@
   --paper: #f7f3ea;
   --card: #fffdf8;
   --ink: #1f2a24;
-  --muted: #6b7568;
+  --muted: #545d52; /* darkened to meet WCAG AA contrast on the paper background */
   --line: #ddd5c4;
   --green: #2f6b45;
   --green-dark: #24543a;

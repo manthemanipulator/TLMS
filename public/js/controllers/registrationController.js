@@ -14,10 +14,21 @@ import { STRIPE_PUBLISHABLE_KEY } from '../config.js';
 import { esc, statusBadge, toast } from '../views/format.js';
 
 let stripe;
-function getStripe() {
+/**
+ * Returns the Stripe client, waiting for Stripe.js if it is still loading
+ * (the script tag is async so it does not delay the page).
+ */
+async function getStripe() {
   if (!stripe) {
     if (!STRIPE_PUBLISHABLE_KEY.startsWith('pk_test_')) {
       throw new Error('Add your Stripe test publishable key (pk_test_...) to public/js/config.js');
+    }
+    if (!window.Stripe) {
+      const tag = document.getElementById('stripe-js');
+      await new Promise((resolve, reject) => {
+        tag.addEventListener('load', resolve, { once: true });
+        tag.addEventListener('error', () => reject(new Error('The payment form could not be loaded. Check your connection and try again.')), { once: true });
+      });
     }
     stripe = window.Stripe(STRIPE_PUBLISHABLE_KEY);
   }
@@ -43,7 +54,7 @@ async function openPayment(tournament, { clientSecret, registrationId }) {
   dialog.querySelector('#pay-title').textContent = `Entry fee: ${tournament.name}`;
   const errorEl = dialog.querySelector('#pay-error');
   errorEl.textContent = '';
-  const s = getStripe();
+  const s = await getStripe();
   const elements = s.elements({ clientSecret });
   const paymentElement = elements.create('payment');
   paymentElement.mount('#payment-element');

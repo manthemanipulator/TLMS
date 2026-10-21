@@ -1,0 +1,37 @@
+{
+  "site": "https://tlms-venue.web.app",
+  "runAt": "2026-10-21T01:12:42.101Z",
+  "targetP95Ms": 800,
+  "coldRequestMs": 466,
+  "sequential": {
+    "count": 100,
+    "min": 182,
+    "median": 238,
+    "p95": 426,
+    "p99": 496,
+    "max": 574,
+    "mean": 262
+  },
+  "concurrent": {
+    "clients": 200,
+    "requestsPerClient": 5,
+    "wallClockMs": 9878,
+    "succeeded": 1000,
+    "total": 1000,
+    "failuresByStatus": {},
+    "latency": {
+      "count": 1000,
+      "min": 203,
+      "median": 1570,
+      "p95": 3581,
+      "p99": 4313,
+      "max": 5550,
+      "mean": 1789
+    }
+  },
+  "verdict": {
+    "latencyP95UnderTarget": true,
+    "concurrentP95UnderTarget": false,
+    "concurrentAllSucceeded": true
+  }
+}

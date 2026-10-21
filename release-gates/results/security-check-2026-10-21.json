@@ -1,0 +1,92 @@
+{
+  "site": "https://tlms-venue.web.app",
+  "runAt": "2026-10-21T01:11:43.913Z",
+  "passed": 14,
+  "total": 14,
+  "results": [
+    {
+      "check": "Player creates a tournament directly in Firestore",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "Player marks their own registration paid directly in Firestore",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "Player lists every registration (other players’ included)",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "Player lists every player profile",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "Player reads processed webhook records",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "API call with no token",
+      "expected": "refused (401)",
+      "passed": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "check": "API call with a forged token",
+      "expected": "refused (401)",
+      "passed": true,
+      "detail": "HTTP 401"
+    },
+    {
+      "check": "Player creates a tournament through the API",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "Player runs payment reconciliation (admin job)",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "Player submits a Paper Golf round (scorer-only)",
+      "expected": "refused (403)",
+      "passed": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "check": "Webhook with no Stripe signature",
+      "expected": "refused (400)",
+      "passed": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "check": "Webhook with a forged Stripe signature",
+      "expected": "refused (400)",
+      "passed": true,
+      "detail": "HTTP 400"
+    },
+    {
+      "check": "No secret keys in the files served to browsers",
+      "expected": "none found",
+      "passed": true,
+      "detail": "5 files scanned"
+    },
+    {
+      "check": "Plain HTTP is redirected to HTTPS",
+      "expected": "redirect to https",
+      "passed": true,
+      "detail": "HTTP 301 -> https://tlms-venue.web.app/"
+    }
+  ]
+}
