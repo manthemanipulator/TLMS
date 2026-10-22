@@ -18,6 +18,7 @@
  * Adapters are created on first use rather than at load time, because
  * secret values are only available while a function is running.
  */
+const { setGlobalOptions } = require('firebase-functions/v2');
 const { onRequest } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { defineSecret } = require('firebase-functions/params');
@@ -33,6 +34,13 @@ const { sendMatchReminders } = require('./src/reminders');
 const STRIPE_SECRET_KEY = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY');
+
+// Least privilege: every function runs as a dedicated service account that
+// holds only the roles it needs (Firestore read/write, the three secrets, log
+// writing), instead of the default compute account, which has Editor on the
+// whole project. The full address is required: the deploy step that grants
+// secret access rejects the "name@" shorthand. The emulator ignores this.
+setGlobalOptions({ serviceAccount: 'tlms-functions@tlms-venue.iam.gserviceaccount.com' });
 
 initializeApp();
 const db = getFirestore();
